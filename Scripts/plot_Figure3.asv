@@ -1,0 +1,440 @@
+%% plot Figure 3BC - plot of simulated and fitted infection dynamics and comparison of features
+clearvars;
+clc;
+
+%get data (time and CN values per individual)
+data_Ke = readtable('Data_Ke2022.xlsx');
+
+%get all patient IDs
+ID = unique(data_Ke.('Ind'));
+ind_num = 1:length(ID);
+
+%determine fixed parameter values
+load('sol') %load estimated parameters
+S0 = 8*10^7; %total number of epithelial cells in nose at t=0, Ke et al., 2022
+dN= 1/11; %death rate of all target cells, Tomasetti et al., 2017
+pN = S0*dN; %production of new epithelial cells
+b0 = 4.92*10^(-9); %infectivity rate, Ke et al., 2022
+dI = 2.45; %death of infected cells, Ke et al., 2022
+dV = 10; %deactivation virus, Ke et al., 2022
+
+%get estimated parameters for all patients
+icount = 1;
+for i = 1:length(sol)
+    if ismember(i,[24,35,41,48]) %remove the 4 individuals as Ke et al.
+        ind_num(find(ind_num == i)) =  [];
+        ID(find(ID == i)) = [];
+    else
+        pB(icount) = sol{i}.P(1);
+        pV(icount) = sol{i}.P(2);
+        dB(icount) = sol{i}.P(3);
+        icount = icount+1;
+    end
+end
+
+%rename log10 and rescaled parameter to trans_X
+trans_pB = (log(pB)-mean(log(pB)))./std(log(pB));
+trans_pV = (log(pV)-mean(log(pV)))./std(log(pV));
+trans_dB = (log(dB)-mean(log(dB)))./std(log(dB));
+
+% figure 
+% histogram(trans_pB)
+% 
+% figure 
+% histogram(trans_pV)
+% 
+% figure 
+% histogram(trans_dB)
+
+%remove individuals with extrem estimated parameters (to get Gaussian
+%parameter distribution for sampling)
+% ind_sim = find(trans_dB<-1.5);
+ind_sim1 = find(-2>trans_pB | trans_pB>2);
+pB(ind_sim1) = [];
+pV(ind_sim1) = [];
+dB(ind_sim1) = [];
+trans_pB(ind_sim1) = [];
+trans_pV(ind_sim1) = [];
+trans_dB(ind_sim1) = [];
+ID(ind_sim1) = [];
+ind_num(ind_sim1) = [];
+
+ind_sim2 = find(-2>trans_pV | trans_pV>2);
+pB(ind_sim2) = [];
+pV(ind_sim2) = [];
+dB(ind_sim2) = [];
+trans_pB(ind_sim2) = [];
+trans_pV(ind_sim2) = [];
+trans_dB(ind_sim2) = [];
+ID(ind_sim2) = [];
+ind_num(ind_sim2) = [];
+
+% ind_sim = find(trans_dB<-1.5);
+ind_sim3 = find(-2>trans_dB | trans_dB>2);
+pB(ind_sim3) = [];
+pV(ind_sim3) = [];
+dB(ind_sim3) = [];
+trans_pB(ind_sim3) = [];
+trans_pV(ind_sim3) = [];
+trans_dB(ind_sim3) = [];
+ID(ind_sim3) = [];
+ind_num(ind_sim3) = [];
+
+% for i_red = [24,35,41,48]
+%     if sum(ind_num == i_red) > 0
+%         ind_num(find(ind_num == i_red)) = []; %remove the 4 individuals also from further analysis
+%     end
+% end
+
+%re-standardize the new parameter distribution after removing individuals
+%from analysis
+trans_pB2 = (log(pB)-mean(log(pB)))./std(log(pB));
+trans_pV2 = (log(pV)-mean(log(pV)))./std(log(pV));
+trans_dB2 = (log(dB)-mean(log(dB)))./std(log(dB));
+
+%test whether the distributions are  standard Gaussians correcting for
+%three-fold testing by Bonferrroni correction, alpha = 0.05/3
+[h_pB,p_pB,ksstat_pB] = kstest(trans_pB2,'Alpha',0.05/3);
+[h_pV,p_pV,ksstat_pV] = kstest(trans_pV2,'Alpha',0.05/3);
+[h_dB,p_dB,ksstat_dB] = kstest(trans_dB2,'Alpha',0.05/3);
+
+%fit a normal distribution to the transformed data
+pd_pB = fitdist(trans_pB2','Normal');
+pd_pV = fitdist(trans_pV2','Normal');
+pd_dB = fitdist(trans_dB2','Normal');
+
+%determine covariance matrix
+Sigma = [pd_pB.sigma corr(trans_pB2',trans_pV2')*std(trans_pB2)*std(trans_pV2) corr(trans_pB2',trans_dB2')*std(trans_pB2)*std(trans_dB2);...
+    corr(trans_pB2',trans_pV2')*std(trans_pB2)*std(trans_pV2) pd_pV.sigma corr(trans_pV2',trans_dB2')*std(trans_dB2)*std(trans_pV2);...
+    corr(trans_pB2',trans_dB2')*std(trans_pB2)*std(trans_dB2) corr(trans_pV2',trans_dB2')*std(trans_dB2)*std(trans_pV2) pd_dB.sigma];
+
+%draw paramater sets from multi-variate normal distribution (50 simulations)
+rng(1); %set seed for reproducability
+sim_par = mvnrnd([pd_pB.mu pd_pV.mu pd_dB.mu],Sigma,50);
+
+%re-scale simulated parameters
+sim_pB = exp(sim_par(:,1).*std(log(pB)) + mean(log(pB)));
+sim_pV = exp(sim_par(:,2).*std(log(pV)) + mean(log(pV)));
+sim_dB = exp(sim_par(:,3).*std(log(dB)) + mean(log(dB)));
+
+icount = 1;
+%for each of the individuals remaining in the analysis 
+for ID_opt = ind_num
+
+    tspan = 0:0.1:20; %short term infection dynamics
+
+    %determine the corresponding individual-specific parameters
+    pB_n = sol{ID_opt}.P(1);
+    pV_n = sol{ID_opt}.P(2);
+    dB_n = sol{ID_opt}.P(3);
+
+    %determine the initial values and B_thres for simulation
+    y0_n = [S0, 1, 0, 0];
+    B_thres = 1-dI*dV/(b0*S0*(pV_n-dI));
+    options = odeset('NonNegative',[1,2,3,4]); %specify non-negative values
+    [t,y] = ode45(@(t,y) odefcn_SARSCoV2_infection(t,y,b0,dI,pV_n,dV,pN,dN,pB_n,dB_n,B_thres), tspan, y0_n,options);
+
+    %get values of viral load
+    y_short = y(:,3);
+    %for numerics, limit lowest viral load to 1
+    y_short(y_short<1)=1;
+
+    %get summary of viral load B_thres and B for all individuals
+    Y_fit(:,icount) = y_short;
+    Bthres_fit(icount) = B_thres;
+    B_fit(:,icount) = y(:,4);
+
+    icount = icount+1;
+
+end
+
+%compute the features for the fitted infection dynamics
+%get peak viral load and timing of viral load
+[val_fit,ind_fit] = max(Y_fit);
+
+for j_fit = 1:size(Y_fit,2)
+        if -(log10(Y_fit(end,j_fit))-11.35)/(-0.25) <= - 42 %for fitted infection dynamics going below detection threshold
+            %find the time point at which the infection dynamics below the
+            %detection threshold for the firts time after infection
+            below_thres_fit(j_fit) = (find(-(log10(Y_fit(ind_fit(j_fit):end,j_fit))-11.35)/(-0.25) <= - 42,1,'first')-1)*0.1+(ind_fit(j_fit)-1)*0.1;
+        else %for fitted infection dynamics not going below detection threshold
+            below_thres_fit(j_fit) = 20;
+        end
+
+        %find the first time point for which B > B_thres 
+        if ~isempty(find(B_fit(:,j_fit)>Bthres_fit(j_fit),1,'first')) 
+            R0_1_fit(j_fit) = (find(B_fit(:,j_fit)>Bthres_fit(j_fit),1,'first')-1)*0.1;
+        else
+            R0_1_fit(j_fit) = 20;
+        end
+end
+
+%simulate infection dynamics
+for i_sim = 1:length(sim_pB)
+
+    %assign the simulated individual-specific parameters
+    pB_sim = sim_pB(i_sim);
+    pV_sim = sim_pV(i_sim);
+    dB_sim = sim_dB(i_sim);
+
+    tspan = 0:0.1:20; %short term infection dynamics
+
+    %determine the initial values and B_thres for simulation
+    y0 = [S0, 1, 0, 0];
+    B_thres_sim = 1-dI*dV/(b0*S0*(pV_sim-dI));
+    options = odeset('NonNegative',[1,2,3,4]); %specify non-negative values
+    [t,y_sim] = ode45(@(t,y) odefcn_SARSCoV2_infection(t,y,b0,dI,pV_sim,dV,pN,dN,pB_sim,dB_sim,B_thres_sim), tspan, y0,options);
+
+    y_short_sim = y_sim(:,3);
+    % %if values too small, fix at 1 (numerical problems)
+    y_short_sim(y_short_sim<1)=1;
+
+    Y_sim(:,i_sim) = y_short_sim;
+    B_sim(:,i_sim) = y_sim(:,4);
+    Bthres_sim(i_sim) = B_thres_sim;
+
+end
+
+[val_sim,ind_sim] = max(Y_sim);
+
+%compute the features for the fitted infection dynamics
+%get peak viral load and timing of viral load
+for j_sim = 1:size(Y_sim,2)
+        if -(log10(Y_sim(end,j_sim))-11.35)/(-0.25) <= - 42 %for fitted infection dynamics going below detection threshold
+            %find the time point at which the infection dynamics below the
+            %detection threshold for the firts time after infection
+            below_thres(j_sim) = (find(-(log10(Y_sim(ind_sim(j_sim):end,j_sim))-11.35)/(-0.25) <= - 42,1,'first')-1)*0.1+(ind_sim(j_sim)-1)*0.1;
+        else %for fitted infection dynamics not going below detection threshold
+            below_thres(j_sim) = 20;
+        end
+
+        %find the first time point for which B > B_thres 
+        if ~isempty(find(B_sim(:,j_sim)>Bthres_sim(j_sim),1,'first'))
+            R0_1_sim(j_sim) = (find(B_sim(:,j_sim)>Bthres_sim(j_sim),1,'first')-1)*0.1;
+        else
+            R0_1_sim(j_sim) = 20;
+         end
+end
+
+%set colors for plot
+C = [{[255,102,0]./255}, {[105,0,170]./255}, {[0,0,0]./255}];
+FA = 0.2;
+LW = 1; %linewidth
+
+% figure('visible','off');
+figure
+%specify figure layout
+t = tiledlayout(1,8,'TileSpacing','Compact','Padding','Compact');
+nexttile([1,3]);
+
+%plot both the simulated and fitted short-term infection dynamics
+for iplot = 1:length(sim_pB)
+
+    %plot fitted and simulated one by on for visibility
+    if iplot <= size(Y_fit,2)
+        Traj_Ke(iplot,:) = (-(log10(Y_fit(:,iplot))-11.35)/(-0.25));
+        %plot(tspan,-(log10(Y_fit(:,iplot))-11.35)/(-0.25),'Color', [C{1},FA],'Linewidth',LW) %Ke 2022 nasal
+        %hold on
+    end
+    Traj_sim(iplot,:) = (-(log10(Y_sim(:,iplot))-11.35)/(-0.25));
+    %plot(tspan,-(log10(Y_sim(:,iplot))-11.35)/(-0.25),'Color',[C{2},FA],'Linewidth',LW) 
+    %hold on
+
+end
+
+y1 = prctile(Traj_Ke,10);
+y2 = prctile(Traj_Ke,90);
+patch([tspan fliplr(tspan)], [y1 fliplr(y2)], C{1}, 'FaceAlpha', FA, 'EdgeColor', 'none')
+% hold on
+% plot(tspan,prctile(Traj_Ke,10),'Color', [C{1},FA],'Linewidth',LW)
+% hold on
+% plot(tspan,prctile(Traj_Ke,90),'Color', [C{1},FA],'Linewidth',LW)
+hold on
+
+
+y1 = prctile(Traj_sim,10);
+y2 = prctile(Traj_sim,90);
+patch([tspan fliplr(tspan)], [y1 fliplr(y2)], C{2}, 'FaceAlpha', FA, 'EdgeColor', 'none')
+hold on
+
+plot(tspan,median(Traj_Ke),'Color', [C{1}],'Linewidth',LW) %Ke 2022 nasal
+hold on
+plot(tspan,median(Traj_sim),'Color', [C{2}],'Linewidth',LW)
+hold on
+
+plot([0,20],[-42,-42],'--','Color', [0,0,0]./255,'LineWidth',1)
+xlim([0,20])
+ylim([-45,-10])
+xticks([0,10,20])
+yticks([-40,-30,-20,-10])
+yticklabels({40,30,20,10})
+box off
+xlabel('Days since infection')
+ylabel('Nasal CN values')
+
+%get scatter for data points
+rnd = normrnd(0, 0.1, [length(val_sim),1]);
+scatter_fit = ones(length(val_fit),1)+rnd(1:length(val_fit));
+scatter_sim = 2*ones(length(val_sim),1)+rnd;
+sD = 10; %size of data points
+sig_level = 0.5/5;
+
+%plot peak viral load comparison
+nexttile
+Y{:,1}=log10(val_fit)';
+Y{:,2}=log10(val_sim)';
+violin(Y,'x',[1, 2], 'facecolor', [C{1};C{2}], 'edgecolor', 'none', 'facealpha', FA, 'mc', [],'medc',[]);
+hold on
+scatter(scatter_fit,log10(val_fit),'o','MarkerEdgeColor','none','SizeData',sD,'MarkerFaceColor',C{1},'MarkerFaceAlpha',3*FA)
+hold on
+median_val_fit = median(log10(val_fit));
+plot([1-0.25,1+0.25],[median(log10(val_fit)),median(log10(val_fit))],'-','Color', C{3},'LineWidth', 2*LW)
+hold on
+scatter(scatter_sim,log10(val_sim),'o','MarkerEdgeColor','none','SizeData',sD,'MarkerFaceColor',C{2},'MarkerFaceAlpha',3*FA)
+hold on
+median_val_sim = median(log10(val_sim));
+plot([2-0.25,2+0.25],[median(log10(val_sim)),median(log10(val_sim))],'-', 'Color', C{3}, 'LineWidth', 2*LW)
+%ylabel('peak viral load')
+xticks([1,2])
+xticklabels({})
+ylim([0,Inf])
+xlim([1-0.5,2+0.5])
+box off
+[h_val,p_val,ks2stat_val] = kstest2(log10(val_fit)',log10(val_sim)','Alpha',sig_level);
+
+%plot B_thres comparison
+nexttile
+Y{:,1}=Bthres_fit';
+Y{:,2}=Bthres_sim';
+violin(Y,'x',[1, 2], 'facecolor', [C{1};C{2}], 'edgecolor', 'none', 'facealpha', FA, 'mc', [],'medc',[]);
+hold on
+scatter(scatter_fit,Bthres_fit,'o','MarkerEdgeColor','none','SizeData',sD,'MarkerFaceColor',C{1},'MarkerFaceAlpha',3*FA)
+hold on
+meadian_Bthres_fit = median(Bthres_fit);
+plot([1-0.25,1+0.25],[median(Bthres_fit),median(Bthres_fit)],'-','Color',C{3},'LineWidth',2*LW)
+hold on
+scatter(scatter_sim,Bthres_sim,'o','MarkerEdgeColor','none','SizeData',sD,'MarkerFaceColor',C{2},'MarkerFaceAlpha',3*FA)
+hold on
+median_Bthres_sim = median(Bthres_sim);
+plot([2-0.25,2+0.25],[median(Bthres_sim),median(Bthres_sim)],'-','Color',C{3},'LineWidth',2*LW)
+%ylabel('B_{thres}')
+xticks([1,2])
+xticklabels({})
+ylim([0,1])
+xlim([1-0.5,2+0.5])
+box off
+[h_Bthres,p_Bthres,ks2stat_Bthres] = kstest2(Bthres_fit',Bthres_sim','Alpha',sig_level);
+
+%plot days from infection to peak viral load
+nexttile
+Y{:,1}=(ind_fit-1)*0.1';
+Y{:,2}=(ind_sim-1)*0.1';
+violin(Y,'x',[1, 2], 'facecolor', [C{1};C{2}], 'edgecolor', 'none', 'facealpha', FA, 'mc', [],'medc',[]);
+hold on
+scatter(scatter_fit,(ind_fit-1)*0.1,'o','MarkerEdgeColor','none','SizeData',sD,'MarkerFaceColor',C{1},'MarkerFaceAlpha',3*FA)
+hold on
+median_inf_peak_fit = median((ind_fit-1)*0.1);
+plot([1-0.25,1+0.25],[median((ind_fit-1)*0.1),median((ind_fit-1)*0.1)],'-','Color',C{3},'LineWidth',2*LW)
+hold on
+scatter(scatter_sim,(ind_sim-1)*0.1,'o','MarkerEdgeColor','none','SizeData',sD,'MarkerFaceColor',C{2},'MarkerFaceAlpha',3*FA)
+hold on
+median_inf_peak_sim = median((ind_sim-1)*0.1);
+plot([2-0.25,2+0.25],[median((ind_sim-1)*0.1),median((ind_sim-1)*0.1)],'-','Color',C{3},'LineWidth',2*LW)
+%ylabel('days')
+xticks([1,2])
+xticklabels({})
+yticks([0,5,10,15,20])
+ylim([0,20])
+xlim([1-0.5,2+0.5])
+box off
+[h_tpeak,p_tpeak,ks2stat_tpeak] = kstest2((ind_fit'-1)*0.1,(ind_sim'-1)*0.1,'Alpha',sig_level);
+
+%plot days from peak viral load (symptom onset) to first undetectable viral
+%load
+nexttile
+Y{:,1}=below_thres_fit-(ind_fit-1)*0.1';
+Y{:,2}=below_thres-(ind_sim-1)*0.1';
+violin(Y,'x',[1, 2], 'facecolor', [C{1};C{2}], 'edgecolor', 'none', 'facealpha', FA, 'mc', [],'medc',[]);
+hold on
+scatter(scatter_fit,below_thres_fit-(ind_fit-1)*0.1,'o','MarkerEdgeColor','none','SizeData',sD,'MarkerFaceColor',C{1},'MarkerFaceAlpha',3*FA)
+hold on
+median_peak_undetect_fit = median(below_thres_fit-(ind_fit-1)*0.1);
+plot([1-0.25,1+0.25],[median(below_thres_fit-(ind_fit-1)*0.1),median(below_thres_fit-(ind_fit-1)*0.1)],'-','Color', C{3}, 'LineWidth',2*LW)
+hold on
+scatter(scatter_sim,below_thres-(ind_sim-1)*0.1,'o','MarkerEdgeColor','none','SizeData',sD,'MarkerFaceColor',C{2},'MarkerFaceAlpha',3*FA)
+hold on
+a = below_thres-(ind_sim-1)*0.1;
+median_peak_undetect_sim = median(a(~isnan(a)));
+plot([2-0.25,2+0.25],[median(a(~isnan(a))),median(a(~isnan(a)))],'-','Color',C{3},'LineWidth',2*LW)
+xticks([1,2])
+xticklabels({})
+yticks([0,5,10,15,20])
+yticklabels({})
+ylim([0,20])
+xlim([1-0.5,2+0.5])
+box off
+[h_tno,p_tno,ks2stat_tno] = kstest2(below_thres_fit'-(ind_fit'-1)*0.1,below_thres'-(ind_sim'-1)*0.1,'Alpha',sig_level);
+
+%plot inf to B > B_thres
+nexttile
+Y{:,1}=R0_1_fit';
+Y{:,2}=R0_1_sim';
+violin(Y,'x',[1, 2], 'facecolor', [C{1};C{2}], 'edgecolor', 'none', 'facealpha', FA, 'mc', [],'medc',[]);
+hold on
+scatter(scatter_fit,R0_1_fit,'o','MarkerEdgeColor','none','SizeData',sD,'MarkerFaceColor',C{1},'MarkerFaceAlpha',3*FA)
+hold on
+median_R01_fit = median(R0_1_fit);
+plot([1-0.25,1+0.25],[median(R0_1_fit),median(R0_1_fit)],'-','Color',C{3},'LineWidth',2*LW)
+hold on
+scatter(scatter_sim,R0_1_sim,'o','MarkerEdgeColor','none','SizeData',sD,'MarkerFaceColor',C{2},'MarkerFaceAlpha',3*FA)
+hold on
+a = R0_1_sim;
+median_R01_sim = median(a(~isnan(a)));
+plot([2-0.25,2+0.25],[median(a(~isnan(a))),median(a(~isnan(a)))],'-', 'Color',C{3},'LineWidth',2*LW)
+xticks([1,2])
+xticklabels({})
+yticks([0,5,10,15,20])
+yticklabels({})
+ylim([0,20])
+xlim([1-0.5,2+0.5])
+box off
+[h_B,p_B,ks2stat_B] = kstest2(R0_1_fit',R0_1_sim','Alpha',0.05/6);
+
+clear figure_property;
+figure_property.units = 'inches';
+figure_property.format = 'pdf';
+figure_property.Preview= 'none';
+figure_property.Width= '8'; % Figure width on canvas
+figure_property.Height= '3'; % Figure height on canvas
+figure_property.Units= 'inches';
+figure_property.Color= 'rgb';
+figure_property.Background= 'w';
+figure_property.FixedfontSize= '10';
+figure_property.ScaledfontSize= 'auto';
+figure_property.FontMode= 'scaled';
+figure_property.FontSizeMin= '10';
+figure_property.FixedLineWidth= '1';
+figure_property.ScaledLineWidth= 'auto';
+figure_property.LineMode= 'none';
+figure_property.LineWidthMin= '1';
+figure_property.FontName= 'Arial';% Might want to change this to something that is available
+figure_property.FontWeight= 'auto';
+figure_property.FontAngle= 'auto';
+figure_property.FontEncoding= 'latin1';
+figure_property.PSLevel= '3';
+figure_property.Renderer= 'painters';
+figure_property.Resolution= '600';
+figure_property.LineStyleMap= 'none';
+figure_property.ApplyStyle= '0';
+figure_property.Bounds= 'tight';
+figure_property.LockAxes= 'off';
+figure_property.LockAxesTicks= 'off';
+figure_property.ShowUI= 'off';
+figure_property.SeparateText= 'off';
+chosen_figure=gcf;
+set(chosen_figure,'PaperUnits','inches');
+set(chosen_figure,'PaperPositionMode','auto');
+set(chosen_figure,'PaperSize',[str2num(figure_property.Width) str2num(figure_property.Height)]); % Canvas Size
+set(chosen_figure,'Units','inches');
+hgexport(gcf,'.\Figures\Figure3BCa.pdf',figure_property); %Set desired file name
+
