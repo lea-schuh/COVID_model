@@ -10,6 +10,23 @@ Lea Schuh<sup>a,\*</sup>, Peter V. Markov<sup>a,b</sup>, Vladimir M. Veliov<sup>
 \
 e-mails: lea.schuh@ec.europa.eu, nikolaos.stilianakis@ec.europa.eu
 
-###Summary
-Interactions between SARS-CoV-2 and the immune system during infection are complex. However, understanding the within-host SARS-CoV-2 dynamics is of enormous importance for clinical and public health outcomes. Current mathematical models focus on describing the within-host SARS-CoV-2 dynamics during the acute infection phase. Thereby they ignore important long-term post-acute infection effects. We present a mathematical model, which not only describes the SARS-CoV-2 infection dynamics during the acute infection phase, but extends current approaches by also recapitulating clinically observed long-term post-acute infection effects, such as the recovery of the number of susceptible epithelial cells to an initial pre-infection homeostatic level, a permanent and full clearance of the infection within the individual, immune waning, and the formation of long-term immune capacity levels after infection. Finally, we used our model and its description of the long-term post-acute infection dynamics to explore reinfection scenarios differentiating between distinct variant-specific properties of the reinfecting virus. Together, the model’s ability to describe not only the acute but also the long-term post-acute infection dynamics provides a more realistic description of key outcomes and allows for its application in clinical and public health scenarios.
+### Summary
+Interactions between SARS-CoV-2 and the immune system during infection are complex. However, understanding the within-host SARS-CoV-2 dynamics is of enormous importance for clinical and public health outcomes. Current mathematical models focus on describing the within-host SARS-CoV-2 dynamics during the acute infection phase. Thereby they ignore important long-term post-acute infection effects. We present a mathematical model, which not only describes the SARS-CoV-2 infection dynamics during the acute infection phase, but extends current approaches by also recapitulating clinically observed long-term post-acute infection effects, such as the recovery of the number of susceptible epithelial cells to an initial pre-infection homeostatic level, a permanent and full clearance of the infection within the individual, immune waning, and the formation of long-term immune capacity levels after infection. Finally, we used our model and its description of the long-term post-acute infection dynamics to explore reinfection scenarios differentiating between distinct variant-specific properties of the reinfecting virus. Together, the model’s ability to describe not only the acute but also the long-term post-acute infection dynamics provides a more realistic description of key outcomes and allows for its application in clinical and public health scenarios. \
+\
+Required software: MATLAB (R2023a) \
 
+### Folder structure
+<ul>
+  <li>Data</li>
+  <li>Figures</li>
+  <li>Results</li>
+  <li>Scripts</li>
+</ul> 
+
+### How to run the code
+The important script is main_script for running the workflow (parameter estimation, simulation of model fits of Ke et al. 2022, comparisons, simulation study, long-term infection simulations, and reinfection simulations) and for plotting the resulting figures. 
+
+#### Data
+#### Figures
+#### Results
+#### Scripts
