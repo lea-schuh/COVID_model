@@ -1,5 +1,6 @@
 # COVID_model
-contains code accompanying the paper: 
+contains code accompanying the paper: Schuh et al., (2024) Mathematical Biosciences (371), https://doi.org/10.1016/j.mbs.2024.109178.
+
 ## A mathematical model for the within-host (re)infection dynamics of SARS-CoV-2
 Lea Schuh<sup>a,\*</sup>, Peter V. Markov<sup>a,b</sup>, Vladimir M. Veliov<sup>c</sup>, Nikolaos I. Stilianakis<sup>a,d,\*</sup> \
 <sup>a</sup> Joint Research Centre (JRC), European Commission, Via Enrico Fermi 2749, Ispra, 21027, Italy \
